@@ -118,12 +118,12 @@ We create the table for this query using:
 
 ```SQL
 CREATE TABLE IF NOT EXISTS session_table 
-(session_id int, item_in_session int, artist_name text, song_title text, song_length float,
-PRIMARY KEY ((session_id, item_in_session), artist_name, song_title, song_length))
+(session_id int, item_in_session int, artist_name text, song_title text, song_length float, 
+PRIMARY KEY ((session_id, item_in_session)))
 ```
 
-There is a field for each piece of information we need to return. Also, since we are conditioning the results based on `sessionId` and `itemInSession`,
-we place those two first as they both make up the partition key.
+There is a field for each piece of information we need to return. Also, since we are conditioning the results based on `sessionId` and `itemInSession` we place those two first as 
+they both make up the partition key.
 
 #### Second Query Table - User_Session Table
 The second query is: *Give me only the following: name of artist, song (sorted by itemInSession) and user (first and last name) for userid = 10, sessionid = 182*.
@@ -131,26 +131,25 @@ The conditioning clause for this query is different from the first query. Theref
 
 ```SQL
 CREATE TABLE IF NOT EXISTS user_session_table 
-(user_id int, session_id int, artist_name text, item_in_session int, song_title text,
+(user_id int, session_id int, item_in_session int, artist_name text, song_title text,
 first_name text, last_name text,
-PRIMARY KEY ((user_id, session_id), item_in_session, artist_name,  
-             song_title, first_name, last_name))
+PRIMARY KEY ((user_id, session_id), item_in_session))
 ```
 
-In this table, the partition key consists of `user_id` and `session_id` because we condition the query on these two fields. We must also sort `song` by `itemInSession`
-but we are not asked to return `itemInSession`. Also, we are asked to return `artist` data. In order to meet these conditions, we have to carefully design the
-clustering key, which is the portion of the primary key that follows the partition key. By placing `item_in_session` as the first component of the clustering key,
-we will be sorting the results based on this field. The results of the query must be in the same order as how the fields are arranged in the primary key, so
-we place artist before song, and the rest of the user information at the end.
+In this table, the partition key consists of `user_id` and `session_id` because we condition the query on these two fields. We must also sort `song` by `itemInSession` so we add it to the
+primary key as the clustering key, which is the portion of the primary key that follows the partition key. By placing `item_in_session` the clustering key, we will be sorting the results based on this field.
 
 #### Third Query Table - User Table
 The third query is: *Give me every user name (first and last) in my music app history who listened to the song 'All Hands Against His Own'*
 The conditioning field is the song title. We must include that in the partioning key.
+However, that is not enough to make the primary key unique because different users
+can listen to the same song. Therefore, we add `user_id` to the primary key to
+make it unique.
 
 ```SQL
 CREATE TABLE IF NOT EXISTS user_table
-(first_name text, last_name text, song_title text,
-PRIMARY KEY(song_title, first_name, last_name))
+(song_title text, user_id text, first_name text, last_name text,
+PRIMARY KEY(song_title, user_id))
 ```
 
 The other fields we have to return are the names of the user listening to the song.
@@ -168,19 +167,18 @@ with open(file, encoding = 'utf8') as f:
     csvreader = csv.reader(f)
     next(csvreader) # skip header
     for line in csvreader:
-## TO-DO: Assign the INSERT statements into the `query` variable
         query = "INSERT INTO session_table (session_id, item_in_session, artist_name, song_title, song_length)"
         query = query + "VALUES (%s, %s, %s, %s, %s)"
-        ## TO-DO: Assign which column element should be assigned for each column in the INSERT statement.
-        ## For e.g., to INSERT artist_name and user first_name, you would change the code below to `line[0], line[1]`
         try:
             session.execute(query, (int(line[8]), int(line[3]), line[0], line[9], float(line[5])))
         except Exception as e:
             print(e)
 ```
 
-Note that we have to specify the column number for each field of the table. Note that we have to recast the data from the CSV to match the data type of the table.
-Inserting data into the other two tables follows the same process, with different data column numbers to match the table fields.
+Note that we have to specify the column number for each field of the table. Note that we have to recast the data from the CSV to match the data type of the table. It is also important that we
+insert the data for the columns in the same order as they were specified when we
+created the tables. Inserting data into the other two tables follows the same process, 
+with different data column numbers to match the table fields.
 
 ## Running the Queries
 Now, we have created the tables and inserted data. We can run the queries that the Sparkify analysts had requested.
